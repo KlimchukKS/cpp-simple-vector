@@ -11,9 +11,6 @@ public:
 
     explicit ArrayPtr(size_t size) {
         my_vector_ = new Type[size]();
-        std::generate(my_vector_, my_vector_ + size, [](){
-            return std::move(Type{});
-        });
     }
 
     ArrayPtr(const ArrayPtr&) = delete;
