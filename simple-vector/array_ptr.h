@@ -11,6 +11,9 @@ public:
 
     explicit ArrayPtr(size_t size) {
         my_vector_ = new Type[size]();
+        std::generate(my_vector_, my_vector_ + size, [](){
+            return std::move(Type{});
+        });
     }
 
     ArrayPtr(const ArrayPtr&) = delete;
@@ -18,10 +21,10 @@ public:
 
 
     ArrayPtr(ArrayPtr&& other) {
-        my_vector_ = std::exchange(other.my_vector_, my_vector_);
+        swap(other);
     }
     ArrayPtr& operator=(ArrayPtr&& other) {
-        my_vector_ = std::exchange(other.my_vector_, my_vector_);
+        swap(other);
         return *this;
     }
 
@@ -44,12 +47,5 @@ public:
 
     const Type& operator[](size_t index) const noexcept {
         return my_vector_[index];
-    }
-
-    Type& operator*() const {
-        if(!my_vector_){
-            throw std::logic_error("ptr_");
-        }
-        return *my_vector_;
     }
 };
