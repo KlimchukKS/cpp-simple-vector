@@ -90,17 +90,14 @@ public:
             return;
         }
         if (new_size > size_ && new_size < capacity_) {
-            for(auto it = end(); it != begin() + new_size; ++it) {
-                *it = std::move(Type{});
-            }
+            std::generate(end(), begin() + new_size, [](){
+                return std::move(Type{});
+            });
             size_ = new_size;
             return;
         }
-        ArrayPtr<Type> tmp(new_size);
-        std::move(begin(), end(), &tmp[0]);
-        my_vector_.swap(tmp);
+        Reserve(new_size);
         size_ = new_size;
-        capacity_ = new_size;
     }
 
     Iterator begin() noexcept {
@@ -145,16 +142,16 @@ public:
     }
 
     SimpleVector(SimpleVector&& other) {
-        size_ = std::exchange(other.size_, 0);
-        capacity_ = std::exchange(other.capacity_, 0);
-        my_vector_ = std::move(other.my_vector_);
+        std::swap(size_, other.size_);
+        std::swap(capacity_, other.capacity_);
+        my_vector_.swap(other.my_vector_);
     }
 
     SimpleVector operator=(SimpleVector&& rhs) {
         if (this == &rhs) {
             return *this;
         }
-        SimpleVector tmp(rhs);
+        SimpleVector tmp(std::move(rhs));
         swap(tmp);
         return *this;
     }
@@ -165,67 +162,39 @@ public:
         my_vector_.swap(other.my_vector_);
     }
 
+    void PushBack(const Type& item) {
+        Type new_item = item;
+        return PushBack(std::move(new_item));
+    }
+
     void PushBack(Type&& item) {
         if (size_ < capacity_) {
             my_vector_[size_++] = std::move(item);
             return;
         }
-        if (!capacity_) {
-            ArrayPtr<Type> tmp(++capacity_);
-            std::move(begin(), end(), &tmp[0]);
-            my_vector_.swap(tmp);
-            my_vector_[size_++] = std::move(item);
-            return;
-        }
-        ArrayPtr<Type> tmp(capacity_ *= 2);
-        std::move(begin(), end(), &tmp[0]);
-        my_vector_.swap(tmp);
+        size_t new_capacity = (!capacity_) ? 1 : capacity_ * 2;
+        Reserve(new_capacity);
         my_vector_[size_++] = std::move(item);
     }
 
     Iterator Insert(ConstIterator pos, const Type& value) {
-        if (!capacity_) {
-            ArrayPtr<Type> tmp(++capacity_);
-            std::copy(begin(), end(), &tmp[0]);
-            my_vector_.swap(tmp);
-            my_vector_[size_++] = value;
-            return begin();
-        }
-        if (size_ < capacity_) {
-            std::copy_backward(const_cast<Iterator>(pos), end(), &my_vector_[1 + ++size_]);
-            *const_cast<Iterator>(pos) = value;
-            return const_cast<Iterator>(pos);
-        }
-        size_t n_pos = std::distance(begin(), const_cast<Iterator>(pos));
-        ArrayPtr<Type> tmp(capacity_ *= 2);
-        std::copy(begin(), end(), &tmp[0]);
-        std::copy_backward(const_cast<Iterator>(pos), begin() + size_, &tmp[1 + size_]);
-        ++size_;
-        tmp[n_pos] = value;
-        my_vector_.swap(tmp);
-        return Iterator{&my_vector_[n_pos]};
+        Type value_copy = value;
+        return Insert(pos, value_copy);
     }
 
     Iterator Insert(ConstIterator pos, Type&& value) {
-        if (!capacity_) {
-            ArrayPtr<Type> tmp(++capacity_);
-            std::move(begin(), end(), &tmp[0]);
-            my_vector_.swap(tmp);
-            my_vector_[size_++] = std::move(value);
-            return begin();
-        }
+        size_t n_pos = std::distance(begin(), const_cast<Iterator>(pos));
         if (size_ < capacity_) {
-            std::copy_backward(std::make_move_iterator(const_cast<Iterator>(pos)), std::make_move_iterator(end()), (&my_vector_[1 + ++size_]));
+            std::move(&my_vector_[n_pos], end(), &my_vector_[n_pos + 1]);
             *const_cast<Iterator>(pos) = std::move(value);
+            ++size_;
             return const_cast<Iterator>(pos);
         }
-        size_t n_pos = std::distance(begin(), const_cast<Iterator>(pos));
-        ArrayPtr<Type> tmp(capacity_ *= 2);
-        std::move(begin(), end(), &tmp[0]);
-        std::copy_backward(std::make_move_iterator(const_cast<Iterator>(pos)), std::make_move_iterator(begin() + size_), (&tmp[1 + size_]));
+        size_t new_capacity = (!capacity_) ? 1 : capacity_ * 2;
+        Reserve(new_capacity);
+        std::move(&my_vector_[n_pos], end(), &my_vector_[n_pos + 1]);
         ++size_;
-        tmp[n_pos] = std::move(value);
-        my_vector_.swap(tmp);
+        my_vector_[n_pos] = std::move(value);
         return Iterator{&my_vector_[n_pos]};
     }
 
@@ -237,6 +206,9 @@ public:
 
     Iterator Erase(ConstIterator pos) {
         size_t n_pos = std::distance(begin(), const_cast<Iterator>(pos));
+        if (n_pos > size_) {
+            throw std::overflow_error("Invalid iterator");
+        }
         std::move(&my_vector_[n_pos + 1], end(), const_cast<Iterator>(pos));
         --size_;
         return const_cast<Iterator>(pos);
@@ -248,7 +220,7 @@ public:
         }
         ArrayPtr<Type> tmp(new_capacity);
         capacity_ = new_capacity;
-        std::copy(begin(), end(), &tmp[0]);
+        std::move(begin(), end(), &tmp[0]);
         my_vector_.swap(tmp);
     }
 };
