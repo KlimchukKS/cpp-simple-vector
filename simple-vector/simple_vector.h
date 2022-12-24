@@ -17,10 +17,6 @@ public:
 
 template <typename Type>
 class SimpleVector {
-private:
-    size_t size_ = 0;
-    size_t capacity_ = 0;
-    ArrayPtr<Type> my_vector_;
 public:
     using Iterator = Type*;
     using ConstIterator = const Type*;
@@ -86,18 +82,16 @@ public:
     }
 
     void Resize(size_t new_size) {
-        if (new_size < size_) {
+        if (new_size <= size_) {
             size_ = new_size;
             return;
         }
-        if (new_size > size_ && new_size <= capacity_) {
-            std::generate(end(), begin() + new_size, [](){
-                return std::move(Type{});
-            });
-            size_ = new_size;
-            return;
+        if (new_size > capacity_) {
+            Reserve(new_size);
         }
-        Reserve(new_size);
+        std::generate(end(), begin() + capacity_, [](){
+            return std::move(Type{});
+        });
         size_ = new_size;
     }
 
@@ -178,31 +172,13 @@ public:
     }
 
     Iterator Insert(ConstIterator pos, const Type& value) {
-        size_t n_pos = std::distance(begin(), const_cast<Iterator>(pos));
-        if (size_ < capacity_) {
-            std::move(&my_vector_[n_pos], end(), &my_vector_[n_pos + 1]);
-            *const_cast<Iterator>(pos) = value;
-            ++size_;
-            return const_cast<Iterator>(pos);
-        }
-        Reserve(std::max(size_t(1), capacity_ * 2));
-        std::move(&my_vector_[n_pos], end(), &my_vector_[n_pos + 1]);
-        ++size_;
+        auto n_pos = MoveBeforeInsert(pos);
         my_vector_[n_pos] = value;
         return Iterator{&my_vector_[n_pos]};
     }
 
     Iterator Insert(ConstIterator pos, Type&& value) {
-        size_t n_pos = std::distance(begin(), const_cast<Iterator>(pos));
-        if (size_ < capacity_) {
-            std::move(&my_vector_[n_pos], end(), &my_vector_[n_pos + 1]);
-            *const_cast<Iterator>(pos) = std::move(value);
-            ++size_;
-            return const_cast<Iterator>(pos);
-        }
-        Reserve(std::max(size_t(1), capacity_ * 2));
-        std::move(&my_vector_[n_pos], end(), &my_vector_[n_pos + 1]);
-        ++size_;
+        auto n_pos = MoveBeforeInsert(pos);
         my_vector_[n_pos] = std::move(value);
         return Iterator{&my_vector_[n_pos]};
     }
@@ -228,11 +204,23 @@ public:
         }
         ArrayPtr<Type> tmp(new_capacity);
         std::move(begin(), end(), &tmp[0]);
-        std::generate(&tmp[0] + size_, &tmp[0] + new_capacity, [](){
-            return std::move(Type{});
-        });
         capacity_ = new_capacity;
         my_vector_.swap(tmp);
+    }
+
+private:
+    size_t size_ = 0;
+    size_t capacity_ = 0;
+    ArrayPtr<Type> my_vector_;
+
+    size_t MoveBeforeInsert(ConstIterator pos) {
+        size_t n_pos = std::distance(begin(), const_cast<Iterator>(pos));
+        if (size_ >= capacity_) {
+            Reserve(std::max(size_t(1), capacity_ * 2));
+        }
+        std::move(&my_vector_[n_pos], end(), &my_vector_[n_pos + 1]);
+        ++size_;
+        return n_pos;
     }
 };
 
